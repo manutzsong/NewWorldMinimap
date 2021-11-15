@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { zoomLevelSettingBounds } from '@/logic/storage';
 import { IAppSettingsPageProps } from '../AppSettings';
 import { useSharedSettingsStyles } from '../sharedSettingStyles';
-import AdvancedSettings from './AdvancedSettings';
 
 export default function WindowSettingsPage(props: IAppSettingsPageProps) {
     const {
@@ -33,7 +32,7 @@ export default function WindowSettingsPage(props: IAppSettingsPageProps) {
                 {t('settings.window.transparentHeader')}
             </label>
         </div>
-        <div className={classes.setting}>
+        <div className={classes.setting} hidden>
             <label className={classes.checkbox} title={t('settings.window.transparentToolbarTooltip')}>
                 <input
                     type='checkbox'
@@ -53,7 +52,7 @@ export default function WindowSettingsPage(props: IAppSettingsPageProps) {
                 {t('settings.window.showHeader')}
             </label>
         </div>
-        <div className={classes.setting}>
+        <div className={classes.setting} hidden>
             <label className={classes.checkbox} title={t('settings.window.showToolbarTooltip')}>
                 <input
                     type='checkbox'
@@ -178,39 +177,16 @@ export default function WindowSettingsPage(props: IAppSettingsPageProps) {
                 {t('settings.window.resamplingRate')}
             </label>
         </div>
+        <hr />
         <div className={classes.setting}>
-            <label className={classes.select} title={t('settings.window.rotationSourceTooltip')}>
-                <select
-                    value={settings.rotationSource}
-                    onChange={e => updateSimpleSetting('rotationSource', e.currentTarget.value as RotationSource)}
-                >
-                    <option value='api'>{t('settings.window.rotationSourceApi')}</option>
-                    <option value='computed'>{t('settings.window.rotationSourceComputed')}</option>
-                </select>
-                {t('settings.window.rotationSource')}
+            <label className={classes.textbox} title='Time till Townboard reset'>
+                <input
+                    type='number'
+                    value={settings.timeTownboard}
+                    onChange={e => updateSimpleSetting('timeTownboard', parseInt(e.currentTarget.value))}
+                />
+                {'Time till Townboard resetx'}
             </label>
         </div>
-        <AdvancedSettings>
-            <div className={classes.setting} title={t('settings.window.showPlayerCoordinatesTooltip')}>
-                <label className={classes.checkbox}>
-                    <input
-                        type='checkbox'
-                        checked={settings.showPlayerCoordinates}
-                        onChange={e => updateSimpleSetting('showPlayerCoordinates', e.currentTarget.checked)}
-                    />
-                    {t('settings.window.showPlayerCoordinates')}
-                </label>
-            </div>
-            <div className={classes.setting} title={t('settings.window.showNavMeshTooltip')}>
-                <label className={classes.checkbox}>
-                    <input
-                        type='checkbox'
-                        checked={settings.showNavMesh}
-                        onChange={e => updateSimpleSetting('showNavMesh', e.currentTarget.checked)}
-                    />
-                    {t('settings.window.showNavMesh')}
-                </label>
-            </div>
-        </AdvancedSettings>
     </>;
 }

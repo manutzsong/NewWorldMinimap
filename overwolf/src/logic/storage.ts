@@ -13,15 +13,12 @@ type DeprecatedInterpolation =
     | 'none';
 const deprecatedInterpolationKey = 'interpolation';
 
-const deprecatedFriendServerUrlKey = 'friendServerUrl';
-
 export const simpleStorageDefaultSettings = {
     showHeader: true,
-    showToolbar: NWMM_APP_WINDOW === 'desktop',
+    showToolbar: false,
     transparentHeader: true,
     transparentToolbar: true,
     showText: false,
-    showPlayerCoordinates: false,
     iconScale: 1.5,
     zoomLevel: 2,
     opacity: 1,
@@ -32,13 +29,11 @@ export const simpleStorageDefaultSettings = {
     animationInterpolation: 'cosine' as AnimationInterpolation,
     extrapolateLocation: false,
     shareLocation: false,
+    friends: '',
     resamplingRate: 30,
     lastKnownPosition: debugLocations.default,
-    channelsServerUrl: '',
-    showNavMesh: false,
-    alwaysLaunchDesktop: false,
-    autoLaunchInGame: true,
-    rotationSource: 'api' as RotationSource,
+    friendServerUrl: '',
+    timeTownboard: 30,
 };
 
 {
@@ -65,8 +60,6 @@ export const simpleStorageDefaultSettings = {
     localStorage.removeItem(deprecatedInterpolationKey);
 }
 
-localStorage.removeItem(deprecatedFriendServerUrlKey);
-
 export type SimpleStorageSetting = typeof simpleStorageDefaultSettings;
 
 export const scopedSettings: (keyof SimpleStorageSetting)[] = [
@@ -82,8 +75,8 @@ export const scopedSettings: (keyof SimpleStorageSetting)[] = [
     'animationInterpolation',
     'extrapolateLocation',
     'resamplingRate',
-    'showNavMesh',
-    'rotationSource',
+    'friendServerUrl',
+    'timeTownboard',
 ];
 
 export const iconSettingStorageScope = 'icon';

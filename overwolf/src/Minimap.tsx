@@ -1,30 +1,50 @@
 import clsx from 'clsx';
+import dayjs from 'dayjs';
+import duration from 'dayjs/plugin/duration';
+import relativeTime from 'dayjs/plugin/relativeTime';
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CSSObject } from 'tss-react';
+import { CSSObject, keyframes } from 'tss-react';
+import RecenterIcon from '@/Icons/RecenterIcon';
 import { drawMapHoverLabel } from '@/Minimap/drawMapLabels';
+import MinimapToolbar from '@/MinimapToolbar';
 import { AppContext } from './contexts/AppContext';
 import { globalLayers } from './globalLayers';
-import { FriendData, updateFriendLocation } from './logic/friends';
+import ZoomInIcon from './Icons/ZoomInIcon';
+import ZoomOutIcon from './Icons/ZoomOutIcon';
+import { getFriendCode, updateFriendLocation } from './logic/friends';
 import { positionUpdateRate, registerEventCallback } from './logic/hooks';
 import { getHotkeyManager } from './logic/hotkeyManager';
 import { getMarkers } from './logic/markers';
 import { getNavTarget, resetNav, setNav } from './logic/navigation/navigation';
 import { store } from './logic/storage';
 import { getTileCache } from './logic/tileCache';
-import { canvasCoordinateToWorld } from './logic/tiles';
+import { canvasToMinimapCoordinate } from './logic/tiles';
 import { getNearestTown } from './logic/townLocations';
 import { rotateAround, squaredDistance } from './logic/util';
 import { townZoomDistance } from './Minimap/mapConstants';
 import useMinimapRenderer from './Minimap/useMinimapRenderer';
-import MinimapToolbars, { MinimapInteractionMode } from './MinimapToolbars';
+import MinimapToolbarIconButton from './MinimapToolbarIconButton';
 import { makeStyles } from './theme';
 
+dayjs.extend(duration);
+dayjs.extend(relativeTime);
 interface IProps {
     className?: string;
 }
 
-const useStyles = makeStyles()(() => {
+const showRecenterButton = keyframes({
+    from: {
+        width: 0,
+        padding: 0,
+    },
+    to: {
+        width: 40,
+        padding: 5,
+    },
+});
+
+const useStyles = makeStyles()(theme => {
     const canvasStyling: CSSObject = {
         width: '100%',
         height: '100%',
@@ -55,6 +75,29 @@ const useStyles = makeStyles()(() => {
             zIndex: globalLayers.minimapHoverCanvas,
             pointerEvents: 'none',
         },
+        mapControls: {
+            position: 'absolute',
+            right: theme.spacing(1),
+            bottom: theme.spacing(1),
+            display: 'flex',
+            flexDirection: 'row-reverse',
+        },
+        timeControls: {
+            position: 'absolute',
+            right: theme.spacing(1),
+            bottom: theme.spacing(6),
+            display: 'flex',
+            flexDirection: 'column',
+            zIndex: globalLayers.minimapCanvas,
+        },
+        recenter: {
+            animation: `300ms ease ${showRecenterButton}`,
+            display: 'flex',
+            alignItems: 'center',
+            '& > svg': {
+                width: '100%',
+            },
+        },
     };
 });
 
@@ -73,9 +116,7 @@ export default function Minimap(props: IProps) {
     const playerName = useRef<string>('UnknownFriend');
 
     const [tilesDownloading, setTilesDownloading] = useState(0);
-    const [isMapDragging, setIsMapDragging] = useState(false);
     const [isMapDragged, setIsMapDragged] = useState(false);
-    const [interactionMode, setInteractionMode] = useState<MinimapInteractionMode>('drag');
     const canvas = useRef<HTMLCanvasElement>(null);
     const hoverLabelCanvas = useRef<HTMLCanvasElement>(null);
 
@@ -95,49 +136,41 @@ export default function Minimap(props: IProps) {
         currentPlayerAngle,
         lastDrawParameters,
         getZoomLevel,
-        mapOverride,
+        mapPositionOverride,
         redraw,
         setPlayerPosition,
         zoomBy,
     } = useMinimapRenderer(canvas, hoverLabelCanvas);
 
-    function setPosition(pos: Vector2, rotation: number) {
+    function setPosition(pos: Vector2) {
         if (appContext.settings.shareLocation) {
-            const sharedLocation = updateFriendLocation(appContext.settings.channelsServerUrl, playerName.current, pos);
-            sharedLocation.then(setFriends);
+            const sharedLocation = updateFriendLocation(appContext.settings.friendServerUrl, getFriendCode(),
+                playerName.current, pos, appContext.settings.friends);
+            sharedLocation.then(r => {
+                if (r !== undefined) {
+                    setFriends(r.friends);
+                } else {
+                    setFriends([]);
+                }
+            });
         }
 
         store('lastKnownPosition', pos);
-        setPlayerPosition(pos, rotation);
+        setPlayerPosition(pos);
     }
 
-    function setFriends(channels: undefined | FriendData[]) {
-        currentFriends.current = channels ?? [];
-        redraw(true);
-    }
-
-    function setNavigation(canvasPos: Vector2) {
-        if (!canvas.current) { return; }
-        const centerPos = lastDrawParameters.current?.mapRendererParams.mapCenterPosition;
-        if (!centerPos) { return; }
-        const width = canvas.current.width;
-        const height = canvas.current.height;
-
-        const town = getNearestTown(centerPos);
-        const zoomLevel = town.distance <= townZoomDistance ? appContext.settings.townZoomLevel : appContext.settings.zoomLevel;
-
-        let worldPos = canvasCoordinateToWorld(canvasPos, centerPos, zoomLevel, width, height);
-        if (appContext.settings.compassMode && (appContext.isTransparentSurface ?? false)) {
-            worldPos = rotateAround(centerPos, worldPos, -currentPlayerAngle.current);
-        }
-        const currentTarget = getNavTarget();
-
-        if (currentTarget && squaredDistance(worldPos, currentTarget) < 200) {
-            resetNav();
-        } else {
-            setNav(currentPlayerPosition.current, worldPos);
+    function setFriends(friends: FriendData[]) {
+        if (friends.length === currentFriends.current.length) {
+            for (const key in friends) {
+                if (friends[key].name === currentFriends.current[key].name
+                    && friends[key].location.x === currentFriends.current[key].location.x
+                    && friends[key].location.y === currentFriends.current[key].location.y) {
+                    return;
+                }
+            }
         }
 
+        currentFriends.current = friends;
         redraw(true);
     }
 
@@ -146,21 +179,47 @@ export default function Minimap(props: IProps) {
     }
 
     function handlePointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
-        if ((interactionMode === 'drag' && e.button === 0) || (interactionMode !== 'drag' && e.button === 1)) {
+        if (e.pointerType === 'mouse' && e.button === 1) {
+            if (!canvas.current) { return; }
+            const canvasPos = { x: e.clientX, y: e.clientY };
+            const centerPos = mapPositionOverride.current ?? currentPlayerPosition.current;
+            const width = canvas.current.width;
+            const height = canvas.current.height;
+
+            const town = getNearestTown(centerPos);
+            const zoomLevel = town.distance <= townZoomDistance ? appContext.settings.townZoomLevel : appContext.settings.zoomLevel;
+
+            let worldPos = canvasToMinimapCoordinate(canvasPos, centerPos, zoomLevel, width, height);
+            if (appContext.settings.compassMode && (appContext.isTransparentSurface ?? false)) {
+                worldPos = rotateAround(centerPos, worldPos, -currentPlayerAngle.current);
+            }
+            const currentTarget = getNavTarget();
+
+            if (currentTarget && squaredDistance(worldPos, currentTarget) < 200) {
+                resetNav();
+            } else {
+                setNav(currentPlayerPosition.current, worldPos);
+            }
+
+            redraw(true);
+        }
+
+        if (NWMM_APP_WINDOW !== 'desktop') {
+            return;
+        }
+        // Left mouse button only
+        if (e.pointerType === 'mouse' && e.button === 0) {
             scrollingMap.current = {
                 pointerId: e.pointerId,
                 position: { x: e.pageX, y: e.pageY },
                 threshold: false,
             };
-            setIsMapDragging(true);
             e.currentTarget.setPointerCapture(e.pointerId);
-        } else if ((interactionMode === 'destination' && e.button === 0) || (interactionMode === 'drag' && e.button === 1)) {
-            setNavigation({ x: e.pageX, y: e.pageY });
         }
     }
 
     function onRecenterMap() {
-        mapOverride.current = undefined;
+        mapPositionOverride.current = undefined;
         redraw(true);
         setIsMapDragged(false);
     }
@@ -182,16 +241,11 @@ export default function Minimap(props: IProps) {
             if (dragAllowed) {
                 if (!scrollingMap.current.threshold) {
                     scrollingMap.current.threshold = true;
-                    if (!mapOverride.current) {
-                        mapOverride.current = { ...currentPlayerPosition.current, angle: lastDrawParameters.current?.mapRendererParams.mapAngle ?? 0 };
-                    }
+                    mapPositionOverride.current = { ...mapPositionOverride.current ?? currentPlayerPosition.current };
                     setIsMapDragged(true);
-                } else if (mapOverride.current) {
-                    const angle = lastDrawParameters.current?.mapRendererParams.renderAsCompass && lastDrawParameters.current.mapRendererParams.mapAngle;
-                    const rotatedDX = angle ? dX * Math.cos(angle) - dY * Math.sin(angle) : dX;
-                    const rotatedDY = angle ? dY * Math.cos(angle) + dX * Math.sin(angle) : dY;
-                    mapOverride.current.x -= rotatedDX * getZoomLevel() / 4;
-                    mapOverride.current.y += rotatedDY * getZoomLevel() / 4;
+                } else if (mapPositionOverride.current) {
+                    mapPositionOverride.current.x -= dX * getZoomLevel() / 4;
+                    mapPositionOverride.current.y += dY * getZoomLevel() / 4;
                 }
                 redraw(true);
                 scrollingMap.current.position.x = e.pageX;
@@ -204,7 +258,6 @@ export default function Minimap(props: IProps) {
         if (scrollingMap.current && scrollingMap.current.pointerId === e.pointerId) {
             e.currentTarget.releasePointerCapture(e.pointerId);
             scrollingMap.current = undefined;
-            setIsMapDragging(false);
         }
     }
 
@@ -268,7 +321,7 @@ export default function Minimap(props: IProps) {
         (window as any).setFriends = setFriends;
 
         const callbackUnregister = registerEventCallback(info => {
-            setPosition(info.position, info.rotation);
+            setPosition(info.position);
 
             if (info.name) {
                 playerName.current = info.name;
@@ -280,11 +333,32 @@ export default function Minimap(props: IProps) {
         };
     }, [appContext.settings]);
 
-    if (isMapDragging) {
-        dynamicStyling.cursor = 'move';
-    } else if (interactionMode === 'destination') {
-        dynamicStyling.cursor = 'crosshair';
-    }
+    const [timeTownboard, setTimeTownboard] = useState<number>(5);
+
+    useEffect(() => {
+        setTimeTownboard(appContext.settings.timeTownboard);
+    }, []);
+
+    useEffect(() => {
+        setTimeTownboard(appContext.settings.timeTownboard);
+    }, [appContext.settings.timeTownboard]);
+
+    useEffect(() => {
+        const intervalRate = 1000;// 1 second
+        const rotationInterval = setInterval(() => {
+            let timeTownboardLeft: number = (timeTownboard * 60 * 1000) - intervalRate;
+            timeTownboardLeft = timeTownboardLeft / 60 / 1000;
+            if (timeTownboardLeft <= 0) {
+                setTimeTownboard(30);
+            } else {
+                setTimeTownboard(timeTownboardLeft);
+            }
+        }, intervalRate);
+        // Clean up can be done like this
+        return () => {
+            clearInterval(rotationInterval);
+        };
+    }, [timeTownboard]);
 
     return <div className={clsx(classes.minimap, className)}>
         <canvas
@@ -301,16 +375,28 @@ export default function Minimap(props: IProps) {
             className={clsx(classes.hoverCanvas)}
             style={dynamicStyling}
         />
-        <MinimapToolbars
-            getZoomLevel={getZoomLevel}
-            interactionMode={interactionMode}
-            isMapDragged={isMapDragged}
-            onRecenterMap={onRecenterMap}
-            setInteractionMode={setInteractionMode}
-            zoomBy={zoomBy}
-        />
+
         <div className={classes.cacheStatus}>
             {tilesDownloading > 0 && <p>{t('minimap.tilesLoading', { count: tilesDownloading })}</p>}
         </div>
+        {NWMM_APP_WINDOW === 'desktop' &&
+            <div>
+                <div className={classes.timeControls}>
+                    <h4>{dayjs.duration(timeTownboard, 'minutes').humanize()}</h4>
+                    <h6>{(timeTownboard * 60).toFixed(2)} seconds</h6>
+                </div>
+                <MinimapToolbar className={classes.mapControls}>
+                    <MinimapToolbarIconButton onClick={() => zoomBy(getZoomLevel() / -5)} title={t('minimap.zoomIn')}>
+                        <ZoomInIcon />
+                    </MinimapToolbarIconButton>
+                    <MinimapToolbarIconButton onClick={() => zoomBy(getZoomLevel() / 5)} title={t('minimap.zoomOut')}>
+                        <ZoomOutIcon />
+                    </MinimapToolbarIconButton>
+                    {isMapDragged && <MinimapToolbarIconButton className={classes.recenter} onClick={onRecenterMap} title={t('minimap.recenter')}>
+                        <RecenterIcon />
+                    </MinimapToolbarIconButton>}
+                </MinimapToolbar>
+            </div>
+        }
     </div>;
 }

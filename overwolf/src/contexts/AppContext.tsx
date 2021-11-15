@@ -21,7 +21,6 @@ export function loadAppContextSettings(): AppContextSettings {
         transparentHeader: load('transparentHeader'),
         transparentToolbar: load('transparentToolbar'),
         showText: load('showText'),
-        showPlayerCoordinates: load('showPlayerCoordinates'),
         iconScale: load('iconScale'),
         zoomLevel: load('zoomLevel'),
         opacity: load('opacity'),
@@ -33,13 +32,11 @@ export function loadAppContextSettings(): AppContextSettings {
         animationInterpolation: load('animationInterpolation'),
         extrapolateLocation: load('extrapolateLocation'),
         shareLocation: load('shareLocation'),
+        friends: load('friends'),
         resamplingRate: load('resamplingRate'),
         lastKnownPosition: load('lastKnownPosition'),
-        channelsServerUrl: load('channelsServerUrl'),
-        showNavMesh: load('showNavMesh'),
-        alwaysLaunchDesktop: load('alwaysLaunchDesktop'),
-        autoLaunchInGame: load('autoLaunchInGame'),
-        rotationSource: load('rotationSource'),
+        friendServerUrl: load('friendServerUrl'),
+        timeTownboard: load('timeTownboard'),
     };
 }
 
